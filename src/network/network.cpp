@@ -6,6 +6,7 @@
 
 #include "network.h"
 #include "security.h"
+#include "../config/timezones.h"
 #include "../ui/ui.h"
 #include "../utils/utils.h"
 #include <ESPmDNS.h>
@@ -105,10 +106,9 @@ void startNetworkServices() {
 
 // ========== NTP Functions ==========
 void applyTimezone() {
-  int gmtOffset_sec = settings.gmtOffset * 60;  // Convert minutes to seconds
-  int daylightOffset_sec = settings.daylightSaving ? 3600 : 0;
-
-  configTime(gmtOffset_sec, daylightOffset_sec, NTP_SERVER_PRIMARY, NTP_SERVER_SECONDARY);
+  // The POSIX rule includes the daylight-saving dates, so summer time is automatic
+  if (settings.tzIndex >= TIMEZONE_COUNT) settings.tzIndex = 0;
+  configTzTime(TIMEZONES[settings.tzIndex].posix, NTP_SERVER_PRIMARY, NTP_SERVER_SECONDARY);
 }
 
 void initNTP() {

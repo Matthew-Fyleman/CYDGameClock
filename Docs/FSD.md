@@ -137,13 +137,14 @@ This screen is drawn at full resolution and refreshed every second. It shows:
 
 ## 8. Settings website
 
-The site is at `http://cydgameclock.local` or `http://<IP address>`. It contains everything from the SmallOLED-PCMonitor configurator: clock style and animation tuning, time zone / DST / 12-24 h / date format, colon blink, refresh rate, brightness and scheduled night dimming, night-light brightness, static IP, metric layout and labels, export/import of the configuration as JSON, firmware update (OTA) and Reset WiFi.
+The site is at `http://cydgameclock.local` or `http://<IP address>`. It contains everything from the SmallOLED-PCMonitor configurator: clock style and animation tuning, 12-24 h and date format, colon blink, refresh rate, brightness and scheduled night dimming, night-light brightness, static IP, metric layout and labels, export/import of the configuration as JSON, firmware update (OTA) and Reset WiFi.
 
 Changes in this version:
 
 * **Login required.** User name `admin`. The password is the pairing code by default, and can be changed to the user's own password (at least 8 characters) in **Security & PC Link**. **HTTP Digest** authentication is used, so the password never travels over the network in readable form. Every page, including firmware upload, needs the login.
 * **Security & PC Link** section: shows the pairing code, makes a new one on request (with a warning that the daemon must then be updated), changes the website password, and shows the rejected-packet count.
 * **Display Settings:** a new "Rotate screen 180°" option (the clock restarts to apply it).
+* **Time zone** is chosen by name from a list of 43 zones (e.g. "London, Edinburgh (GMT / BST)", "US & Canada Eastern (EST / EDT)"), replacing the GMT-offset list and the manual daylight-saving switch. Each zone is stored as a POSIX TZ rule that includes its summer-time dates, so the clock changes to and from daylight saving automatically. The default is **London (GMT, with BST in summer)**. The zone is saved by name (NVS key `tz`), so the list can be extended later without affecting saved settings, and it appears as `"timezone"` in the exported configuration.
 * **Reset WiFi Settings** now restarts into the setup portal of §3.1.
 
 ## 9. PC stats link and security
@@ -204,7 +205,7 @@ The backlight is PWM-dimmed from 0 to 255. Scheduled dimming switches to a lower
 |---|---|
 | `wifi` | Home network name and password |
 | `security` | Pairing code; optional website password |
-| `pcmonitor` | All clock, display, network and metric-layout settings (same keys as the OLED version, plus `flipScreen`) |
+| `pcmonitor` | All clock, display, network and metric-layout settings (same keys as the OLED version, plus `flipScreen` and `tz`; `gmtOffset` and `dst` are no longer used) |
 
 > **Note.** NVS is not encrypted. Someone with the device and a USB cable could read the WiFi password from flash. Fixing this would need ESP32 flash encryption, which permanently burns eFuses on the board, so it is not enabled. Keep the clock somewhere you trust, as you would any device that knows your WiFi password.
 
@@ -247,3 +248,5 @@ Docs/                     this specification, WiFi security instructions
 | T10 | Open the settings website | Login requested; the pairing code works as the password |
 | T11 | Hold "Forget WiFi" for 3 s on the info screen | Credentials cleared; setup portal starts |
 | T12 | Hold the game screen for 1 s | Night light toggles |
+| T13 | Fresh settings | Time zone is "London, Edinburgh (GMT / BST)"; the time shown matches UK local time |
+| T14 | Choose another zone (e.g. US Eastern) and save | The clock changes to that zone's local time, including its summer time |

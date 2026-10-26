@@ -7,6 +7,7 @@
 #include "settings.h"
 #include "../config/config.h"
 #include <Preferences.h>
+#include "timezones.h"
 
 
 Preferences preferences;
@@ -20,8 +21,7 @@ void loadSettings() {
     settings.clockStyle = 0;
     settings.flipScreen = false;
     settings.displayBrightness = 255;
-    settings.gmtOffset = 1;
-    settings.daylightSaving = true;
+    settings.tzIndex = 0;  // London (GMT / BST)
     settings.use24Hour = true;
     settings.dateFormat = 0;
     settings.clockPosition = 0; // Center by default
@@ -75,8 +75,7 @@ void loadSettings() {
         "Fresh preferences namespace detected, initializing with defaults...");
     // Write defaults to NVS
     preferences.putInt("clockStyle", 0);
-    preferences.putInt("gmtOffset", 1);
-    preferences.putBool("dst", true);
+    preferences.putString("tz", TIMEZONES[0].key);
     preferences.putBool("use24Hour", true);
     preferences.putInt("dateFormat", 0);
     preferences.putInt("clockPos", 0);    // Center
@@ -118,17 +117,8 @@ void loadSettings() {
 
   settings.clockStyle = preferences.getInt("clockStyle", 0); // Default: Mario
 
-  // gmtOffset migration: convert old hours to new minutes format
-  int loadedOffset = preferences.getInt("gmtOffset", 60);
-  if (loadedOffset >= -12 && loadedOffset <= 14 && loadedOffset != 0) {
-    // Old format (hours): convert to minutes
-    settings.gmtOffset = loadedOffset * 60;
-    preferences.putInt("gmtOffset", settings.gmtOffset); // Save new format
-  } else {
-    settings.gmtOffset = loadedOffset; // Already in minutes
-  }
-
-  settings.daylightSaving = preferences.getBool("dst", true);  // Default: true
+  // Time zone, stored by key (default London: GMT with BST in summer)
+  settings.tzIndex = timezoneIndexForKey(preferences.getString("tz", TIMEZONES[0].key).c_str());
   settings.use24Hour = preferences.getBool("use24Hour", true); // Default: 24h
   settings.dateFormat =
       preferences.getInt("dateFormat", 0); // Default: DD/MM/YYYY
@@ -333,8 +323,7 @@ void loadSettings() {
 void saveSettings() {
   preferences.begin("pcmonitor", false); // Read-write
   preferences.putInt("clockStyle", settings.clockStyle);
-  preferences.putInt("gmtOffset", settings.gmtOffset);
-  preferences.putBool("dst", settings.daylightSaving);
+  preferences.putString("tz", TIMEZONES[settings.tzIndex].key);
   preferences.putBool("use24Hour", settings.use24Hour);
   preferences.putInt("dateFormat", settings.dateFormat);
   preferences.putInt("clockPos", settings.clockPosition);
