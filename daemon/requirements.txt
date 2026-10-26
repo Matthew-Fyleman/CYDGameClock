@@ -1,0 +1,7 @@
+psutil>=5.9
+pyserial>=3.5
+cryptography>=42
+wmi>=1.5
+pywin32>=306
+pystray>=0.19
+pillow>=10
