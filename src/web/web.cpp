@@ -127,6 +127,15 @@ void handleMetricsAPI() {
  server.send(200, "application/json", json);
 }
 
+// Send part of the page and free its memory
+static void sendHtmlPart(String& html) {
+ const int chunkSize = 4096;
+ for (unsigned int sent = 0; sent < html.length(); sent += chunkSize) {
+ server.sendContent(html.substring(sent, min(sent + chunkSize, html.length())));
+ }
+ html = String();
+}
+
 void handleRoot() {
  // Generate hour options for scheduled dimming
  String startHourOptions = "";
@@ -268,6 +277,12 @@ void handleRoot() {
  </p></div></div></div><!-- Timezone Section --><div class="section-header" onclick="toggleSection('timezoneSection')"><h3>&#127760; Timezone</h3><span class="section-arrow">&#9660;</span></div><div id="timezoneSection" class="section-content collapsed"><div class="card"><label for="gmtOffset">GMT Offset</label><select name="gmtOffset" id="gmtOffset">
 )rawliteral";
 
+ // The page is too big to build in memory in one piece on the CYD, so each
+ // part is sent as soon as it is ready (chunked transfer)
+ server.setContentLength(CONTENT_LENGTH_UNKNOWN);
+ server.send(200, "text/html", "");
+ sendHtmlPart(html);
+
  // Generate timezone options (30-minute increments)
  for (int minutes = -720; minutes <= 840; minutes += 30) {
  String selected = (settings.gmtOffset == minutes) ? "selected" : "";
@@ -286,7 +301,9 @@ void handleRoot() {
  html += "<option value=\"" + String(minutes) + "\" " + selected + ">" + label + "</option>\n";
  }
 
- html += R"rawliteral(
+ sendHtmlPart(html);
+
+ html = R"rawliteral(
  </select><label for="dst">Daylight Saving Time</label><select name="dst" id="dst"><option value="1" )rawliteral" + String(settings.daylightSaving ? "selected" : "") + R"rawliteral(>Enabled (+1 hour)</option><option value="0" )rawliteral" + String(!settings.daylightSaving ? "selected" : "") + R"rawliteral(>Disabled</option></select></div></div><!-- Network Configuration Section --><div class="section-header" onclick="toggleSection('networkSection')"><h3>&#127760; Network Configuration</h3><span class="section-arrow">&#9660;</span></div><div id="networkSection" class="section-content collapsed"><div class="card"><label for="useStaticIP">IP Address Mode</label><select name="useStaticIP" id="useStaticIP" onchange="toggleStaticIPFields()"><option value="0" )rawliteral" + String(!settings.useStaticIP ? "selected" : "") + R"rawliteral(>DHCP (Automatic)</option><option value="1" )rawliteral" + String(settings.useStaticIP ? "selected" : "") + R"rawliteral(>Static IP</option></select><div id="staticIPFields" style="display: )rawliteral" + String(settings.useStaticIP ? "block" : "none") + R"rawliteral(;"><label for="staticIP" style="margin-top: 15px;">Static IP Address</label><input type="text" name="staticIP" id="staticIP" value=")rawliteral" + String(settings.staticIP) + R"rawliteral(" placeholder="192.168.1.100" pattern="^(?:[0-9]{1,3}\.){3}[0-9]{1,3}$"><label for="gateway">Gateway</label><input type="text" name="gateway" id="gateway" value=")rawliteral" + String(settings.gateway) + R"rawliteral(" placeholder="192.168.1.1" pattern="^(?:[0-9]{1,3}\.){3}[0-9]{1,3}$"><label for="subnet">Subnet Mask</label><input type="text" name="subnet" id="subnet" value=")rawliteral" + String(settings.subnet) + R"rawliteral(" placeholder="255.255.255.0" pattern="^(?:[0-9]{1,3}\.){3}[0-9]{1,3}$"><label for="dns1">Primary DNS</label><input type="text" name="dns1" id="dns1" value=")rawliteral" + String(settings.dns1) + R"rawliteral(" placeholder="8.8.8.8" pattern="^(?:[0-9]{1,3}\.){3}[0-9]{1,3}$"><label for="dns2">Secondary DNS</label><input type="text" name="dns2" id="dns2" value=")rawliteral" + String(settings.dns2) + R"rawliteral(" placeholder="8.8.4.4" pattern="^(?:[0-9]{1,3}\.){3}[0-9]{1,3}$"></div><p style="color: #888; font-size: 12px; margin-top: 15px; background: #0f172a; padding: 10px; border-radius: 5px; border-left: 3px solid #fbbf24;"><strong>&#9888; Warning:</strong> Changing to Static IP will require a device restart. Make sure the IP address does not conflict with other devices on your network.
  </p></div></div><!-- Display Layout Section --><div class="section-header" onclick="toggleSection('layoutSection')"><h3>&#128202; Display Layout (PC Monitor only)</h3><span class="section-arrow">&#9660;</span></div><div id="layoutSection" class="section-content collapsed"><div class="card"><label for="clockPosition">Clock Position</label><select name="clockPosition" id="clockPosition"><option value="0" )rawliteral" + String(settings.clockPosition == 0 ? "selected" : "") + R"rawliteral(>Center (Top)</option><option value="1" )rawliteral" + String(settings.clockPosition == 1 ? "selected" : "") + R"rawliteral(>Left Column (Row 1)</option><option value="2" )rawliteral" + String(settings.clockPosition == 2 ? "selected" : "") + R"rawliteral(>Right Column (Row 1)</option></select><label for="clockOffset" style="margin-top: 15px; display: block;">Clock Offset (pixels)</label><input type="number" name="clockOffset" id="clockOffset" value=")rawliteral" + String(settings.clockOffset) + R"rawliteral(" min="-20" max="20" style="width: 100%; padding: 8px; box-sizing: border-box;"><p style="color: #888; font-size: 12px; margin-top: 10px;">
  Position clock to optimize space for metrics. Use offset to fine-tune horizontal position (-20 to +20 pixels).
@@ -319,23 +336,8 @@ void handleRoot() {
  </div></div><!-- Sticky Save Button --><div class="sticky-save"><div class="container"><button type="button" class="save-btn" onclick="saveSettings()">&#128190; Save Settings</button><span id="saveMessage" style="margin-left: 15px; color: #4CAF50; font-weight: bold; display: none;">&#10004; Settings Saved!</span></div></div><script> function toggleSection(sectionId){const content=document.getElementById(sectionId);const arrow=event.currentTarget.querySelector('.section-arrow');content.classList.toggle('collapsed');arrow.classList.toggle('collapsed');const isCollapsed=content.classList.contains('collapsed');if(!isCollapsed){localStorage.setItem('lastExpandedSection',sectionId);}}function toggleStaticIPFields(){const useStaticIP=document.getElementById('useStaticIP').value==='1';const staticIPFields=document.getElementById('staticIPFields');staticIPFields.style.display=useStaticIP ? 'block':'none';}function toggleRefreshRateFields(){const refreshRateMode=document.getElementById('refreshRateMode').value==='1';const refreshRateFields=document.getElementById('refreshRateFields');refreshRateFields.style.display=refreshRateMode ? 'block':'none';}function toggleMarioSettings(){const clockStyle=document.getElementById('clockStyle').value;const marioSettings=document.getElementById('marioSettings');const pongSettings=document.getElementById('pongSettings');const pacmanSettings=document.getElementById('pacmanSettings');const spaceSettings=document.getElementById('spaceSettings');marioSettings.style.display=(clockStyle==='0')? 'block':'none';pongSettings.style.display=(clockStyle==='5')? 'block':'none';pacmanSettings.style.display=(clockStyle==='6')? 'block':'none';spaceSettings.style.display=(clockStyle==='3' || clockStyle==='4')? 'block':'none';}function exportConfig(){fetch('/api/export').then(response=>response.json()).then(data=>{const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download='pc-monitor-config.json';document.body.appendChild(a);a.click();document.body.removeChild(a);URL.revokeObjectURL(url);alert('Configuration exported successfully!');}).catch(err=>alert('Error exporting configuration:'+err));}function importConfig(event){const file=event.target.files[0];if(!file)return;const reader=new FileReader();reader.onload=function(e){try{const config=JSON.parse(e.target.result);fetch('/api/import',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(config)}).then(response=>response.json()).then(data=>{if(data.success){alert('Configuration imported successfully! Reloading page...');location.reload();}else{alert('Error importing configuration:'+data.message);}}).catch(err=>alert('Error importing configuration:'+err));}catch(err){alert('Invalid configuration file:'+err);}};reader.readAsText(file);}function saveSettings(){const form=document.querySelector('form[action="/save"]');const formData=new FormData(form);const saveMessage=document.getElementById('saveMessage');const saveBtn=document.querySelector('.save-btn');const urlEncoded=new URLSearchParams(formData);saveBtn.disabled=true;saveBtn.textContent='💾 Saving...';fetch('/save',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:urlEncoded}).then(response=>response.json()).then(data=>{if(data.success){saveMessage.style.display='inline';setTimeout(()=>{saveMessage.style.display='none';},3000);saveBtn.disabled=false;saveBtn.textContent='💾 Save Settings';if(data.networkChanged){alert('Network settings changed! Device is restarting. You may need to reconnect to the new IP address.');setTimeout(()=>{window.location.href='/';},3000);}}else{alert('Error saving settings');saveBtn.disabled=false;saveBtn.textContent='💾 Save Settings';}}).catch(err=>{alert('Error saving settings:'+err);saveBtn.disabled=false;saveBtn.textContent='💾 Save Settings';});}document.getElementById('uploadForm').addEventListener('submit',function(e){e.preventDefault();const fileInput=document.getElementById('firmwareFile');const file=fileInput.files[0];if(!file){alert('Please select a firmware file(.bin)');return;}if(!file.name.endsWith('.bin')){alert('Please select a valid .bin firmware file');return;}document.getElementById('uploadProgress').style.display='block';document.querySelector('#uploadForm button').disabled=true;const xhr=new XMLHttpRequest();xhr.upload.addEventListener('progress',function(e){if(e.lengthComputable){const percent=Math.round((e.loaded/e.total)*100);document.getElementById('progressBar').style.width=percent+'%';document.getElementById('progressBar').textContent=percent+'%';document.getElementById('uploadStatus').textContent='Uploading:'+percent+'%';}});xhr.addEventListener('load',function(){if(xhr.status===200){document.getElementById('progressBar').style.width='100%';document.getElementById('progressBar').textContent='100%';document.getElementById('uploadStatus').textContent='Update successful! Device is rebooting...';document.getElementById('uploadStatus').style.color='#10b981';setTimeout(function(){window.location.href='/';},8000);}else{document.getElementById('uploadStatus').textContent='Upload failed! Please try again.';document.getElementById('uploadStatus').style.color='#ef4444';document.querySelector('#uploadForm button').disabled=false;}});xhr.addEventListener('error',function(){document.getElementById('uploadStatus').textContent='Upload error! Please try again.';document.getElementById('uploadStatus').style.color='#ef4444';document.querySelector('#uploadForm button').disabled=false;});const formData=new FormData();formData.append('firmware',file);xhr.open('POST','/update');xhr.send(formData);});window.addEventListener('DOMContentLoaded',function(){toggleStaticIPFields();toggleRefreshRateFields();const lastExpandedSection=localStorage.getItem('lastExpandedSection');if(lastExpandedSection){const content=document.getElementById(lastExpandedSection);const headers=document.querySelectorAll('.section-header');if(content){for(let header of headers){if(header.getAttribute('onclick')&& header.getAttribute('onclick').includes(lastExpandedSection)){const arrow=header.querySelector('.section-arrow');content.classList.remove('collapsed');if(arrow)arrow.classList.remove('collapsed');break;}}}}});</script></body></html>
 )rawliteral";
 
- // Send HTML in chunks to avoid buffer overflow
- // ESP32 WebServer has limited buffer, so we send in 4KB chunks
- const int chunkSize = 4096;
- int htmlLength = html.length();
-
- // Send headers first
- server.setContentLength(htmlLength);
- server.send(200, "text/html", "");
-
- // Send content in chunks
- int bytesSent = 0;
- while (bytesSent < htmlLength) {
- int bytesToSend = min(chunkSize, htmlLength - bytesSent);
- server.sendContent(html.substring(bytesSent, bytesSent + bytesToSend));
- bytesSent += bytesToSend;
- delay(2); // Small delay between chunks
- }
+ sendHtmlPart(html);
+ server.sendContent("");  // end of the chunked response
 }
 
 void handleSave() {
